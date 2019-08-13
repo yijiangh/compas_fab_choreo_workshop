@@ -40,19 +40,23 @@ However, if you do use Rhino 5.0, make sure to install the following:
 
 We will install all the required **COMPAS** packages using Anaconda. Anaconda uses **environments** to create isolated spaces for projects' depedencies, it is recommendable that you do all the exercises in a newly created environment.
 
-First, clone this repository. You have two options:
-
-<details><summary>1. Using a visual client <i>(e.g. SourceTree)</i></summary>
+First, clone this repository. 
+<!-- You have two options: -->
+<!-- <details><summary>1. Using a visual client <i>(e.g. SourceTree)</i></summary>
 Open your GIT visual client (e.g. SourceTree), and clone the repository (on SourceTree, `File -> Clone / New`) and enter the following URL and the destination folder:
 
       https://github.com/yijiangh/compas_fab_choreo_workshop.git
 
-</details>
-
-<details><summary>2. Using git command line client</summary>
+</details> -->
+<!-- 
+<details><summary>2. Using git command line client</summary> -->
 Start your Anaconda Prompt, go to the destination folder where you wish to place all the workshop material and run:
+```
+git clone --recursive https://github.com/yijiangh/compas_fab_choreo_workshop.git
+```
 
-      git clone https://github.com/yijiangh/compas_fab_choreo_workshop.git
+<details><summary>If you forget the `--recursive` </summary>
+
 
 </details>
 
@@ -102,8 +106,29 @@ Congrats! 🎉 You are all set! Open Rhino and try to import `compas` to verify 
 ## Exercises
 
 ### Create an assembly planning instance
+```
+cd compas_fab.assembly_tests/gh_prototypes/ur_picknplace
+```
+Open the `ur_picknplace_urdf_export_v0.ghx` in Grasshopper.
 
-TODO: clone https://github.com/yijiangh/compas_fab.assembly_tests 
+### Run semi-constrained Cartesian planning
+
+#### With ros-backend
+```
+cd docker/ros-systems/ros-ur5
+docker-compose up -d
+# after the docker containers are running
+cd ../../../examples
+# make sure you activate the conda env 'workshop' already
+python 0_choreo_cartesian_planning_single_picknplace.py
+```
+
+#### Without ros-backend
+```
+cd examples
+# make sure you activate the conda env 'workshop' already
+python 0_ros_free_choreo_cartesian_planning_single_picknplace.py
+```
 
 <!-- ---
 
