@@ -10,6 +10,7 @@ dependencies:
    - numpy
    - roslibpy>=0.6.0
    - cmake
+   - pytest
    - pip:
      - pybullet
      - git+https://github.com/yijiangh/ikfast_pybind.git@master

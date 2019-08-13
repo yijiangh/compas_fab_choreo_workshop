@@ -30,4 +30,4 @@ install:
 
 script:
 - conda activate workshop
-# - python tests/test_assembly_stack.py
+- pytest -s
