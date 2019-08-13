@@ -14,4 +14,5 @@ dependencies:
    - pip:
      - pybullet
      - git+https://github.com/yijiangh/ikfast_pybind.git@master
+     - git+https://github.com/yijiangh/pychoreo.git@feature/interlock_seq
      - git+https://github.com/yijiangh/compas_fab.git@feature/choreo#egg=compas_fab
