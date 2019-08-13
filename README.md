@@ -8,7 +8,7 @@
 [![Build Status](https://travis-ci.com/yijiangh/compas_fab_choreo_workshop.svg?branch=master)](https://travis-ci.com/yijiangh/compas_fab_choreo_workshop)
 [![GitHub - License](https://img.shields.io/github/license/compas-dev/compas.svg)](./LICENSE)
 
-Materials for the Sequence and Motion Planning for Robotic Spatial Assembly workshop using COMPAS framework and Choreo as planning engine.
+Materials for the Sequence and Motion Planning for Robotic Spatial Assembly workshop using COMPAS framework and Choreo as the planning engine.
 
 > During this workshop, we will ...
 
@@ -100,6 +100,10 @@ Congrats! 🎉 You are all set! Open Rhino and try to import `compas` to verify 
 ---
 
 ## Exercises
+
+### Create an assembly planning instance
+
+TODO: clone https://github.com/yijiangh/compas_fab.assembly_tests 
 
 <!-- ---
 
