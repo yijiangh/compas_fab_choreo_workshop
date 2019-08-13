@@ -1,0 +1,16 @@
+name: workshop
+channels:
+    - conda-forge
+    - anaconda
+
+dependencies:
+   - python=3.6
+   - pip=19.0.1
+   - compas=0.7.0
+   - numpy
+   - roslibpy>=0.6.0
+   - cmake
+   - pip:
+     - pybullet
+     - git+https://github.com/yijiangh/ikfast_pybind.git@master
+     - git+https://github.com/yijiangh/compas_fab.git@feature/choreo#egg=compas_fab
