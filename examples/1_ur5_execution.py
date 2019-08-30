@@ -73,7 +73,7 @@ def calc_jt_time(jt1, jt2, max_joint_vel=0.01):
     return max(min_time)
 
 def traj_reparam(compas_fab_jt_traj, max_jt_vel, max_jt_acc,
-                 traj_time_cnt=0, ts_sample_num=200, grid_num=200, inspect_sol=False):
+                 traj_time_cnt=0, ts_sample_num=100, grid_num=200, inspect_sol=False):
     dof = len(compas_fab_jt_traj.points[0].values)
 
     # Create path
@@ -130,7 +130,7 @@ def traj_reparam(compas_fab_jt_traj, max_jt_vel, max_jt_acc,
     reparam_traj = JointTrajectory(trajectory_points=reparm_traj_pts, start_configuration=reparm_traj_pts[0])
     return reparam_traj
 
-def exec_jt_traj(client, joint_names, compas_fab_jt_traj, handle_success=None, handle_failure=None, real_exe=REAL_EXECUTION):
+def exec_jt_traj(client, joint_names, compas_fab_jt_traj, real_exe=REAL_EXECUTION):
     """reparametrize a JointTrajectry using given maximal joint velocity/acceleration, the execute
     the trajectory with ros follow_joint_trajectory action call.
 
@@ -151,6 +151,12 @@ def exec_jt_traj(client, joint_names, compas_fab_jt_traj, handle_success=None, h
     Returns
     -------
     """
+    w = threading.Event()
+    def handle_success(*args, **kwargs):
+        w.set()
+    def handle_failure(*args, **kwargs):
+        raise Exception('Something went wrong')
+
     msg_data = compas_fab_jt_traj.to_data()
     msg_data['header'] = Header().msg
     msg_data['joint_names'] = joint_names
@@ -158,9 +164,9 @@ def exec_jt_traj(client, joint_names, compas_fab_jt_traj, handle_success=None, h
         msg_data['points'][i]['positions'] = jt_pt_data['values']
 
     if real_exe:
-        cancelable_task = client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
-                            action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
-        return cancelable_task
+        client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
+                        action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
+        w.wait()
     else:
         return None
 
@@ -179,13 +185,6 @@ class MsgGetter(object):
 
 
 def main():
-    w = threading.Event()
-    def handle_success(*args, **kwargs):
-       w.set()
-
-    def handle_failure(*args, **kwargs):
-       raise Exception('Something went wrong')
-
     choreo_problem_instance_dir = compas_fab.get('choreo_instances')
     result_save_path = os.path.join(choreo_problem_instance_dir, 'results', 'choreo_result.json')
     with open(result_save_path, 'r') as f:
@@ -257,7 +256,7 @@ def main():
                                      time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
         print('************\nexecuting init transition')
-        exec_jt_traj(client, joint_names, init_traj, handle_success=handle_success, handle_failure=handle_failure)
+        exec_jt_traj(client, joint_names, init_traj)
 
         print('executed?')
         input()
@@ -278,7 +277,7 @@ def main():
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
             print('=====\nexecuting #{} pick-approach to pick-grasp process'.format(seq_id))
             traj_data = e_process_data['pick_approach']
@@ -290,7 +289,7 @@ def main():
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
             print('executed?')
             input()
@@ -308,7 +307,7 @@ def main():
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
             print('executed?')
             input()
@@ -323,7 +322,7 @@ def main():
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
             print('executed?')
             input()
@@ -338,7 +337,7 @@ def main():
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
             # open gripper
             gripper_srv_call(client, state=0)
@@ -355,7 +354,7 @@ def main():
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
             print('executed?')
             input()
@@ -370,7 +369,7 @@ def main():
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
-            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj)
 
 
 if __name__ == '__main__':
