@@ -22,10 +22,21 @@ from compas_fab.robots import JointTrajectoryPoint, JointTrajectory
 import roslibpy
 import threading
 
-REAL_EXECUTION = False
+REAL_EXECUTION = True
 JOINT_TOPIC_NAME = 'joint_states'
 
 def gripper_srv_call(client, state=0, exe=REAL_EXECUTION):
+    """[summary]
+
+    Parameters
+    ----------
+    client : [type]
+        [description]
+    state : int, optional
+        [description], by default 0
+    exe : [type], optional
+        [description], by default REAL_EXECUTION
+    """
     if not exe:
         return
     service = roslibpy.Service(client, '/ur_driver/set_io', 'ur_msgs/SetIO')
@@ -34,39 +45,87 @@ def gripper_srv_call(client, state=0, exe=REAL_EXECUTION):
     time.sleep(1.0)
 
 def calc_jt_time(jt1, jt2, max_joint_vel=0.01):
+    """[summary]
+
+    Parameters
+    ----------
+    jt1 : list of float
+        start joint values
+    jt2 : list of float
+        end joint values
+    max_joint_vel : float, optional
+        maximal joint velocity, by default 0.01
+
+    Returns
+    -------
+    float
+        time for executing from jt1 to jt2
+    """
     assert len(jt1) == len(jt2)
     min_time = [abs(val1 - val2) / max_joint_vel for val1, val2 in zip(jt1, jt2)]
     return max(min_time)
 
-def exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt, last_jt_pt=None, handle_success=None, handle_failure=None):
+def exec_jt_traj(client, joint_names, compas_fab_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
+    last_jt_pt=None, handle_success=None, handle_failure=None):
+    """reparametrize a JointTrajectry using given maximal joint velocity/acceleration, the execute
+    the trajectory with ros follow_joint_trajectory action call.
+
+    Note: for now, this is UR5 specific! (mainly the action topic name)
+
+    Parameters
+    ----------
+    client : compas_fab ros client
+    joint_names : str
+        joint names of the robot
+    compas_fab_jt_traj : compas_fab.backends.ros.JointTrajectory
+        Joint Trajectory to be executed
+    max_jt_vel : float
+        maximal joint velocity
+    max_jt_acc : float
+        maximal joint acceleration
+    traj_time_cnt : float
+        last time stamp
+    last_jt_pt : compas_fab JointTrajectoryPoint, optional
+        last joint traj point of previous trajectory, by default None
+    handle_success : , optional
+        action success callback handle, by default None
+    handle_failure : [type], optional
+        action failure callback handle, by default None
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     init_time_cnt = traj_time_cnt
-    for i, jt_pt in enumerate(ros_jt_traj.points):
+    for i, jt_pt in enumerate(compas_fab_jt_traj.points):
         # reparam speed
-        ros_jt_traj.points[i].velocities = [max_jt_vel] * len(jt_pt.values)
-        ros_jt_traj.points[i].accelerations = [max_jt_acc] * len(jt_pt.values)
+        compas_fab_jt_traj.points[i].velocities = [max_jt_vel] * len(jt_pt.values)
+        compas_fab_jt_traj.points[i].accelerations = [max_jt_acc] * len(jt_pt.values)
 
         if not last_jt_pt:
             traj_time_cnt = 0.0
         else:
             traj_time_cnt += calc_jt_time(last_jt_pt.values, jt_pt.values)
-        ros_jt_traj.points[i].time_from_start = Duration(traj_time_cnt, 0)
+        compas_fab_jt_traj.points[i].time_from_start = Duration(traj_time_cnt, 0)
 
-        last_jt_pt = ros_jt_traj.points[i]
+        last_jt_pt = compas_fab_jt_traj.points[i]
         # end reparam speed
-        # ros_jt_traj.points[i] = jt_pt
 
-    msg_data = ros_jt_traj.to_data()
+    msg_data = compas_fab_jt_traj.to_data()
     msg_data['header'] = Header().msg
     msg_data['joint_names'] = joint_names
     for i, jt_pt_data in enumerate(msg_data['points']):
         msg_data['points'][i]['positions'] = jt_pt_data['values']
 
-    # cancelable_task = client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
-    #         action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
+    client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
+            action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
 
-    return ros_jt_traj.points[-1], traj_time_cnt
+    return compas_fab_jt_traj.points[-1], traj_time_cnt
 
 class MsgGetter(object):
+    """A dumb message get class
+    """
     def __init__(self):
         self.last_msg = None
 
@@ -111,13 +170,12 @@ def main():
     # [0.0, -94.94770102010436, 98.0376624092449, -93.01855212389889, 0.0, 0.0]
     # UR=192.168.0.30, Linux=192.168.0.1, Windows=192.168.0.2
     # the following host IP should agree with the Linux machine
-    host_ip = '192.168.0.120' if REAL_EXECUTION else 'localhost'
+    host_ip = '192.168.0.1' if REAL_EXECUTION else 'localhost'
     with RosClient(host=host_ip, port=9090) as client:
         client.on_ready(lambda: print('Is ROS connected?', client.is_connected))
 
         # get current configuration
         listener = roslibpy.Topic(client, JOINT_TOPIC_NAME, 'sensor_msgs/JointState')
-        # current_jt_state = JointState()
         msg_getter = MsgGetter()
         listener.subscribe(msg_getter.receive_msg)
         time.sleep(2)
@@ -129,7 +187,7 @@ def main():
         robot = RobotClass(model, semantics=semantics, client=client)
         group = robot.main_group_name
         joint_names = robot.get_configurable_joint_names()
-        base_link_name = robot.get_base_link_name()
+        # base_link_name = robot.get_base_link_name()
         ee_link_name = robot.get_end_effector_link_name()
 
         if pybullet_preview:
@@ -146,7 +204,6 @@ def main():
 
         st_conf = Configuration.from_revolute_values(last_seen_state['position'])
         goal_conf = Configuration.from_revolute_values(json_data[0]['place2pick']['start_configuration']['values'])
-        print('goal conf: ', goal_conf)
         goal_constraints = robot.constraints_from_configuration(goal_conf, [math.radians(1)]*6, group)
         init_traj = robot.plan_motion(goal_constraints, st_conf, group, planner_id='RRTStar')
 
@@ -154,11 +211,14 @@ def main():
             display_trajectory_chunk(pb_robot, joint_names,
                                      init_traj.to_data(), \
                                      ee_attachs=ee_attachs, grasped_attach=[],
-                                     time_step=PB_VIZ_TRANS_TIME_STEP*10, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
+                                     time_step=PB_VIZ_TRANS_TIME_STEP*50, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
         print('************\nexecuting init transition')
         last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, init_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
             last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+
+        print('executed?')
+        input()
 
         for seq_id, e_process_data in enumerate(json_data):
             print('************\nexecuting #{} picknplace process'.format(seq_id))
@@ -190,6 +250,9 @@ def main():
             last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
                 last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
 
+            print('executed?')
+            input()
+
             # close gripper
             gripper_srv_call(client, state=1)
 
@@ -205,6 +268,9 @@ def main():
             last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
                 last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
 
+            print('executed?')
+            input()
+
             print('=====\nexecuting #{} pick-retreat to place-approach transition process'.format(seq_id))
             traj_data = e_process_data['pick2place']
             ros_jt_traj = JointTrajectory.from_data(traj_data)
@@ -216,6 +282,9 @@ def main():
 
             last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
                 last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+
+            print('executed?')
+            input()
 
             print('=====\nexecuting #{} place-approach to place-grasp process'.format(seq_id))
             traj_data = e_process_data['place_approach']
@@ -232,6 +301,9 @@ def main():
             # open gripper
             gripper_srv_call(client, state=0)
 
+            print('executed?')
+            input()
+
             print('=====\nexecuting #{} place-grasp to place-retreat process'.format(seq_id))
             traj_data = e_process_data['place_retreat']
             ros_jt_traj = JointTrajectory.from_data(traj_data)
@@ -242,6 +314,9 @@ def main():
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
             last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
                 last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+
+            print('executed?')
+            input()
 
         if 'return2idle' in json_data[-1]:
             print('=====\nexecuting #{} return-to-idle transition process'.format(seq_id))
