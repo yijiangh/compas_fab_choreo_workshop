@@ -22,6 +22,13 @@ from compas_fab.robots import JointTrajectoryPoint, JointTrajectory
 import roslibpy
 import threading
 
+import toppra as ta
+import toppra.constraint as constraint
+import toppra.algorithm as algo
+import numpy as np
+# misc: for plotting and measuring time
+import matplotlib.pyplot as plt
+
 REAL_EXECUTION = True
 JOINT_TOPIC_NAME = 'joint_states'
 
@@ -65,8 +72,65 @@ def calc_jt_time(jt1, jt2, max_joint_vel=0.01):
     min_time = [abs(val1 - val2) / max_joint_vel for val1, val2 in zip(jt1, jt2)]
     return max(min_time)
 
-def exec_jt_traj(client, joint_names, compas_fab_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-    last_jt_pt=None, handle_success=None, handle_failure=None):
+def traj_reparam(compas_fab_jt_traj, max_jt_vel, max_jt_acc,
+                 traj_time_cnt=0, ts_sample_num=200, grid_num=200, inspect_sol=False):
+    dof = len(compas_fab_jt_traj.points[0].values)
+
+    # Create path
+    way_jt_pts = [jt_pt.values for jt_pt in compas_fab_jt_traj.points]
+    path = ta.SplineInterpolator(np.linspace(0, 1, len(compas_fab_jt_traj.points)), way_jt_pts)
+
+    # Create velocity bounds, then velocity constraint object
+    vlim_ = np.ones(6) * max_jt_vel
+    vlim = np.vstack((-vlim_, vlim_)).T
+    # Create acceleration bounds, then acceleration constraint object
+    alim_ = np.ones(6) * max_jt_acc
+    alim = np.vstack((-alim_, alim_)).T
+    pc_vel = constraint.JointVelocityConstraint(vlim)
+    pc_acc = constraint.JointAccelerationConstraint(
+        alim, discretization_scheme=constraint.DiscretizationType.Interpolation)
+
+    # Setup a parametrization instance, then retime
+    gridpoints = np.linspace(0, path.duration, grid_num)
+    instance = algo.TOPPRA([pc_vel, pc_acc], path, gridpoints=gridpoints, solver_wrapper='seidel')
+    jnt_traj, aux_traj, int_data = instance.compute_trajectory(0, 0, return_data=True)
+
+    if inspect_sol:
+        ts_sample = np.linspace(0, jnt_traj.get_duration(), 100)
+        qdds_sample = jnt_traj.evaldd(ts_sample)
+        qds_sample = jnt_traj.evald(ts_sample)
+
+        fig, axs = plt.subplots(1, 2, sharex=True, figsize=[12, 4])
+        for i in range(6):
+            axs[0].plot(ts_sample, qdds_sample[:, i], label="J{:d}".format(i + 1))
+            axs[1].plot(ts_sample, qds_sample[:, i], label="J{:d}".format(i + 1))
+        axs[0].set_xlabel("Time (s)")
+        axs[0].set_ylabel("Joint acceleration (rad/s^2)")
+        axs[0].legend()
+        axs[1].legend()
+        axs[1].set_xlabel("Time (s)")
+        axs[1].set_ylabel("Joint velocity (rad/s)")
+        plt.show()
+
+    time_list = np.linspace(0, jnt_traj.get_duration(), ts_sample_num)
+    jt_list = jnt_traj.eval(time_list)
+    vel_list = jnt_traj.evald(time_list)
+    acc_list = jnt_traj.evaldd(time_list)
+
+    reparm_traj_pts = []
+    for i in range(ts_sample_num):
+        new_jt_pt = JointTrajectoryPoint(values=jt_list[i].tolist(), types=[0] * 6)
+        new_jt_pt.velocities = vel_list[i].tolist()
+        new_jt_pt.accelerations = acc_list[i].tolist()
+        new_jt_pt.time_from_start = Duration(traj_time_cnt, 0)
+        traj_time_cnt += time_list[i]
+        reparm_traj_pts.append(new_jt_pt)
+        if i == 0 and np.array_equal(time_list, np.zeros(ts_sample_num)):
+            break
+    reparam_traj = JointTrajectory(trajectory_points=reparm_traj_pts, start_configuration=reparm_traj_pts[0])
+    return reparam_traj
+
+def exec_jt_traj(client, joint_names, compas_fab_jt_traj, handle_success=None, handle_failure=None, real_exe=REAL_EXECUTION):
     """reparametrize a JointTrajectry using given maximal joint velocity/acceleration, the execute
     the trajectory with ros follow_joint_trajectory action call.
 
@@ -79,14 +143,6 @@ def exec_jt_traj(client, joint_names, compas_fab_jt_traj, max_jt_vel, max_jt_acc
         joint names of the robot
     compas_fab_jt_traj : compas_fab.backends.ros.JointTrajectory
         Joint Trajectory to be executed
-    max_jt_vel : float
-        maximal joint velocity
-    max_jt_acc : float
-        maximal joint acceleration
-    traj_time_cnt : float
-        last time stamp
-    last_jt_pt : compas_fab JointTrajectoryPoint, optional
-        last joint traj point of previous trajectory, by default None
     handle_success : , optional
         action success callback handle, by default None
     handle_failure : [type], optional
@@ -94,34 +150,20 @@ def exec_jt_traj(client, joint_names, compas_fab_jt_traj, max_jt_vel, max_jt_acc
 
     Returns
     -------
-    [type]
-        [description]
     """
-    init_time_cnt = traj_time_cnt
-    for i, jt_pt in enumerate(compas_fab_jt_traj.points):
-        # reparam speed
-        compas_fab_jt_traj.points[i].velocities = [max_jt_vel] * len(jt_pt.values)
-        compas_fab_jt_traj.points[i].accelerations = [max_jt_acc] * len(jt_pt.values)
-
-        if not last_jt_pt:
-            traj_time_cnt = 0.0
-        else:
-            traj_time_cnt += calc_jt_time(last_jt_pt.values, jt_pt.values)
-        compas_fab_jt_traj.points[i].time_from_start = Duration(traj_time_cnt, 0)
-
-        last_jt_pt = compas_fab_jt_traj.points[i]
-        # end reparam speed
-
     msg_data = compas_fab_jt_traj.to_data()
     msg_data['header'] = Header().msg
     msg_data['joint_names'] = joint_names
     for i, jt_pt_data in enumerate(msg_data['points']):
         msg_data['points'][i]['positions'] = jt_pt_data['values']
 
-    client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
-            action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
+    if real_exe:
+        cancelable_task = client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
+                            action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
+        return cancelable_task
+    else:
+        return None
 
-    return compas_fab_jt_traj.points[-1], traj_time_cnt
 
 class MsgGetter(object):
     """A dumb message get class
@@ -157,7 +199,7 @@ def main():
     # pybullet traj preview settings
     pybullet_preview = True
     PB_VIZ_CART_TIME_STEP = 0.05
-    PB_VIZ_TRANS_TIME_STEP = 0.005
+    PB_VIZ_TRANS_TIME_STEP = 0.025
     PB_VIZ_PER_CONF_SIM = False
 
     urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur5.urdf')
@@ -205,17 +247,17 @@ def main():
         st_conf = Configuration.from_revolute_values(last_seen_state['position'])
         goal_conf = Configuration.from_revolute_values(json_data[0]['place2pick']['start_configuration']['values'])
         goal_constraints = robot.constraints_from_configuration(goal_conf, [math.radians(1)]*6, group)
-        init_traj = robot.plan_motion(goal_constraints, st_conf, group, planner_id='RRTStar')
+        init_traj_raw = robot.plan_motion(goal_constraints, st_conf, group, planner_id='RRTStar')
+        init_traj = traj_reparam(init_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
 
         if pybullet_preview:
             display_trajectory_chunk(pb_robot, joint_names,
                                      init_traj.to_data(), \
                                      ee_attachs=ee_attachs, grasped_attach=[],
-                                     time_step=PB_VIZ_TRANS_TIME_STEP*50, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
+                                     time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
         print('************\nexecuting init transition')
-        last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, init_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-            last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+        exec_jt_traj(client, joint_names, init_traj, handle_success=handle_success, handle_failure=handle_failure)
 
         print('executed?')
         input()
@@ -228,27 +270,27 @@ def main():
 
             print('=====\nexecuting #{} place-retreat to pick-approach transition process'.format(seq_id))
             traj_data = e_process_data['place2pick']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
+
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
-
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
             print('=====\nexecuting #{} pick-approach to pick-grasp process'.format(seq_id))
             traj_data = e_process_data['pick_approach']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
             print('executed?')
             input()
@@ -258,45 +300,45 @@ def main():
 
             print('=====\nexecuting #{} pick-grasp to pick-retreat process'.format(seq_id))
             traj_data = e_process_data['pick_retreat']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
             print('executed?')
             input()
 
             print('=====\nexecuting #{} pick-retreat to place-approach transition process'.format(seq_id))
             traj_data = e_process_data['pick2place']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
             print('executed?')
             input()
 
             print('=====\nexecuting #{} place-approach to place-grasp process'.format(seq_id))
             traj_data = e_process_data['place_approach']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
 
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
             # open gripper
             gripper_srv_call(client, state=0)
@@ -306,14 +348,14 @@ def main():
 
             print('=====\nexecuting #{} place-grasp to place-retreat process'.format(seq_id))
             traj_data = e_process_data['place_retreat']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_CART_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
             print('executed?')
             input()
@@ -321,15 +363,14 @@ def main():
         if 'return2idle' in json_data[-1]:
             print('=====\nexecuting #{} return-to-idle transition process'.format(seq_id))
             traj_data = e_process_data['return2idle']
-            ros_jt_traj = JointTrajectory.from_data(traj_data)
+            ros_jt_traj_raw = JointTrajectory.from_data(traj_data)
+            ros_jt_traj = traj_reparam(ros_jt_traj_raw, max_jt_vel, max_jt_acc, inspect_sol=False)
             if pybullet_preview:
                 display_trajectory_chunk(pb_robot, joint_names,
                                         ros_jt_traj.to_data(), \
                                         ee_attachs=ee_attachs, grasped_attach=[],
                                         time_step=PB_VIZ_TRANS_TIME_STEP, step_sim=True, per_conf_step=PB_VIZ_PER_CONF_SIM)
-
-            last_jt_pt, traj_time_cnt = exec_jt_traj(client, joint_names, ros_jt_traj, max_jt_vel, max_jt_acc, traj_time_cnt,
-                last_jt_pt=last_jt_pt, handle_success=handle_success, handle_failure=handle_failure)
+            exec_jt_traj(client, joint_names, ros_jt_traj, handle_success=handle_success, handle_failure=handle_failure)
 
 
 if __name__ == '__main__':
