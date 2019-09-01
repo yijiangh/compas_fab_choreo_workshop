@@ -112,7 +112,7 @@ def traj_reparam(compas_fab_jt_traj, max_jt_vel, max_jt_acc,
         axs[1].set_ylabel("Joint velocity (rad/s)")
         plt.show()
 
-    time_list = np.linspace(0, jnt_traj.get_duration(), ts_sample_num)
+    time_list = np.linspace(0, float(jnt_traj.get_duration()), ts_sample_num)
     jt_list = jnt_traj.eval(time_list)
     vel_list = jnt_traj.evald(time_list)
     acc_list = jnt_traj.evaldd(time_list)
@@ -122,7 +122,7 @@ def traj_reparam(compas_fab_jt_traj, max_jt_vel, max_jt_acc,
         new_jt_pt = JointTrajectoryPoint(values=jt_list[i].tolist(), types=[0] * 6)
         new_jt_pt.velocities = vel_list[i].tolist()
         new_jt_pt.accelerations = acc_list[i].tolist()
-        new_jt_pt.time_from_start = Duration(traj_time_cnt, 0)
+        new_jt_pt.time_from_start = Duration.from_seconds(traj_time_cnt)
         traj_time_cnt += time_list[i]
         reparm_traj_pts.append(new_jt_pt)
         if i == 0 and np.array_equal(time_list, np.zeros(ts_sample_num)):
@@ -143,10 +143,6 @@ def exec_jt_traj(client, joint_names, compas_fab_jt_traj, real_exe=REAL_EXECUTIO
         joint names of the robot
     compas_fab_jt_traj : compas_fab.backends.ros.JointTrajectory
         Joint Trajectory to be executed
-    handle_success : , optional
-        action success callback handle, by default None
-    handle_failure : [type], optional
-        action failure callback handle, by default None
 
     Returns
     -------
@@ -167,8 +163,15 @@ def exec_jt_traj(client, joint_names, compas_fab_jt_traj, real_exe=REAL_EXECUTIO
         client.follow_joint_trajectory(JointTrajectoryMsg.from_msg(msg_data),
                         action_name='/follow_joint_trajectory', callback=handle_success, errback=handle_failure)
         w.wait()
-    else:
-        return None
+
+    print('====================\nhere printing after wait')
+    print('header: ', msg_data['header'])
+    for msg_iter in msg_data['points']:
+        print('---')
+        print('values: ', msg_iter['values'])
+        print('velocities: ', msg_iter['velocities'])
+        print('accel: ', msg_iter['accelerations'])
+        print('time_from_start: ', msg_iter['time_from_start'])
 
 
 class MsgGetter(object):
@@ -198,7 +201,7 @@ def main():
     # pybullet traj preview settings
     pybullet_preview = True
     PB_VIZ_CART_TIME_STEP = 0.05
-    PB_VIZ_TRANS_TIME_STEP = 0.025
+    PB_VIZ_TRANS_TIME_STEP = 0.04
     PB_VIZ_PER_CONF_SIM = False
 
     urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur5.urdf')
