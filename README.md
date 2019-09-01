@@ -57,6 +57,11 @@ git clone --recursive https://github.com/yijiangh/compas_fab_choreo_workshop.git
 
 <details><summary>If you forget the `--recursive` </summary>
 
+Run the following to update submodules:
+
+```
+git submodule update --init --recursive
+```
 
 </details>
 
@@ -64,8 +69,8 @@ git clone --recursive https://github.com/yijiangh/compas_fab_choreo_workshop.git
 
 Now, we can create the environment and install all packages. Start your Anaconda Prompt, go to the repository folder you just cloned, and run:
 
-      conda env create -f workshop.yml -n workshop
-      conda activate workshop
+      conda env create -f workshop.yml -n compas_fab-choreo_workshop
+      conda activate compas_fab-choreo_workshop
 
 <details><summary>Not working?</summary>
 

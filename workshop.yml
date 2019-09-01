@@ -1,4 +1,4 @@
-name: workshop
+name: compas_fab-choreo_workshop
 channels:
     - conda-forge
     - anaconda
@@ -14,5 +14,6 @@ dependencies:
    - pip:
      - pybullet
      - git+https://github.com/yijiangh/ikfast_pybind.git@master#egg=ikfast_pybind
-     - git+https://github.com/yijiangh/pychoreo.git@feature/interlock_seq#egg=pychoreo
-     - git+https://github.com/yijiangh/compas_fab.git@feature/choreo#egg=compas_fab
+     - git+https://github.com/yijiangh/pychoreo.git@feature/compas_fab-integration#egg=pychoreo
+     - git+https://github.com/yijiangh/compas_fab.git@feature/choreo-seq-planner#egg=compas_fab
+     - git+https://github.com/hungpham2511/toppra.git@master#egg=toppra
