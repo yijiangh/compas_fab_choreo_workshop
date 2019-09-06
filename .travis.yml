@@ -26,8 +26,8 @@ install:
       echo "Configuring conda."
       source /Users/travis/miniconda3/bin/activate root
     # Create environment
-    - conda env create -f workshop.yml
+    - conda env create -f workshop.yml -n compas_fab-choreo_workshop
 
 script:
-- conda activate workshop
+- conda activate compas_fab-choreo_workshop
 - pytest -s
