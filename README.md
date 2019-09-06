@@ -14,10 +14,11 @@ Materials for the Sequence and Motion Planning for Robotic Spatial Assembly work
 
 ## Requirements
 
-* Operating System: **Windows 10** Pro or better <sup>(1)</sup>.
+* Operating System: **Windows 10** Pro 
+<!-- or better <sup>(1)</sup>. -->
 * [Rhinoceros 3D 6.0](https://www.rhino3d.com/): Focus on Rhino 6.0 only. [See here if you use Rhino 5.0](#rhino-50)
 * [Anaconda Python Distribution](https://www.anaconda.com/download/): 2.7 or 3.x
-* [Docker Community Edition](https://www.docker.com/get-started): Download it for [Windows](https://store.docker.com/editions/community/docker-ce-desktop-windows) or [Mac](https://store.docker.com/editions/community/docker-ce-desktop-mac).
+<!-- * [Docker Community Edition](https://www.docker.com/get-started): Download it for [Windows](https://store.docker.com/editions/community/docker-ce-desktop-windows) or [Mac](https://store.docker.com/editions/community/docker-ce-desktop-mac). -->
 * Git: [official command-line client](https://git-scm.com/) or visual GUI (e.g. [Github Desktop](https://desktop.github.com/) or [SourceTree](https://www.sourcetreeapp.com/))
 
 <!-- > Note: if you get an error, scroll down to the [Troubleshooting](#troubleshooting) section. -->
@@ -118,6 +119,13 @@ Open the `ur_picknplace_urdf_export_v0.ghx` in Grasshopper.
 
 ### Run semi-constrained Cartesian planning
 
+#### Without ros-backend
+```
+cd examples
+python 0_choreo_picknplace.py
+```
+
+
 #### With ros-backend
 ```
 cd docker/ros-systems/ros-ur5
@@ -125,14 +133,7 @@ docker-compose up -d
 # after the docker containers are running
 cd ../../../examples
 # make sure you activate the conda env 'workshop' already
-python 0_choreo_cartesian_planning_single_picknplace.py
-```
-
-#### Without ros-backend
-```
-cd examples
-# make sure you activate the conda env 'workshop' already
-python 0_ros_free_choreo_cartesian_planning_single_picknplace.py
+python 0_choreo_picknplace.py -ros
 ```
 
 <!-- ---
