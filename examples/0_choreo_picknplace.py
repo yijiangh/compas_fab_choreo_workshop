@@ -42,11 +42,13 @@ from choreo import direct_ladder_graph_solve_picknplace, divide_nested_list_chun
 from choreo.choreo_utils import plan_joint_motion, get_collision_fn_diagnosis
 
 import ikfast_ur5
+import ikfast_ur3
 
 def main():
     parser = argparse.ArgumentParser()
     # ur_picknplace_multiple_piece
     parser.add_argument('-p', '--problem', default='ur_picknplace_single_piece', help='The name of the problem to solve')
+    parser.add_argument('-rob', '--robot', default='ur3', help='The type of UR robot to use.')
     parser.add_argument('-m', '--plan_transit', action='store_false', help='Plans motions between each picking and placing')
     parser.add_argument('-v', '--viewer', action='store_true', help='Enables the viewer during planning (slow!)')
     parser.add_argument('-s', '--save_result', action='store_true', help='save planning results as a json file')
@@ -83,8 +85,13 @@ def main():
     result_save_path = os.path.join(choreo_problem_instance_dir, 'results', 'choreo_result.json') if args.save_result else None
 
     # urdf, end effector settings
-    urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur5.urdf')
-    srdf_filename = compas_fab.get('universal_robot/ur5_moveit_config/config/ur5.srdf')
+    if args.robot == 'ur3':
+        urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur3.urdf')
+        srdf_filename = compas_fab.get('universal_robot/ur3_moveit_config/config/ur3.srdf')
+    else:
+        urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur5.urdf')
+        srdf_filename = compas_fab.get('universal_robot/ur5_moveit_config/config/ur5.srdf')
+
     urdf_pkg_name = 'ur_description'
 
     ee_filename = compas_fab.get('universal_robot/ur_description/meshes/' +
@@ -163,6 +170,7 @@ def main():
     if has_gui():
         TCP_pb_pose = get_TCP_pose(pb_robot, ee_link_name, tcp_tf, return_pb_pose=True)
         handles = draw_pose(TCP_pb_pose, length=0.04)
+        # wait_for_user()
 
     # deliver ros collision meshes to pybullet
     static_obstacles_from_name = convert_meshes_and_poses_to_pybullet_bodies(co_dict)
@@ -202,7 +210,7 @@ def main():
 
     saved_world = WorldSaver()
 
-    ik_fn = ikfast_ur5.get_ik
+    ik_fn = ikfast_ur3.get_ik if args.robot == 'ur3' else ikfast_ur5.get_ik
     tot_traj, graph_sizes = \
     direct_ladder_graph_solve_picknplace(pb_robot, ik_joint_names, base_link_name, ee_link_name, ik_fn,
         unit_geos, element_seq, static_obstacles_from_name,
