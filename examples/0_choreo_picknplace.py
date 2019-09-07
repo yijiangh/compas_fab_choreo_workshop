@@ -57,14 +57,14 @@ def main():
     parser.add_argument('-tres', '--transit_res', default=0.01, help='joint resolution (rad)')
     parser.add_argument('-ros', '--use_ros', action='store_true', help='use ros backend with moveit planners')
     parser.add_argument('-cart_ts', '--cartesian_time_step', default=0.1, help='cartesian time step in trajectory simulation')
-    parser.add_argument('-trans_ts', '--transit_time_step', default=0.005, help='transition time step in trajectory simulation')
+    parser.add_argument('-trans_ts', '--transit_time_step', default=0.01, help='transition time step in trajectory simulation')
     parser.add_argument('-per_conf_step', '--per_conf_step', action='store_true', help='stepping each configuration in simulation')
     args = parser.parse_args()
     print('Arguments:', args)
 
     VIZ = args.viewer
     VIZ_IKFAST = args.view_ikfast
-    TRANSITION_JT_RESOLUTION = args.transit_res
+    TRANSITION_JT_RESOLUTION = float(args.transit_res)
     plan_transition = args.plan_transit
     use_moveit_planner = args.use_ros
 
@@ -86,7 +86,8 @@ def main():
 
     # urdf, end effector settings
     if args.robot == 'ur3':
-        urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur3.urdf')
+        # urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur3.urdf')
+        urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur3_collision_viz.urdf')
         srdf_filename = compas_fab.get('universal_robot/ur3_moveit_config/config/ur3.srdf')
     else:
         urdf_filename = compas_fab.get('universal_robot/ur_description/urdf/ur5.urdf')

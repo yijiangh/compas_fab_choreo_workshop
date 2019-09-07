@@ -146,6 +146,39 @@ The following diagram shows how the different parts are interconnected and which
 
 ![System overview](images/overview.png)
 
----
+--- 
+-->
 
-## Troubleshooting -->
+## Troubleshooting 
+
+Sometimes things don't go as expected. Here are some of answers to the most common issues you might bump into:
+
+<!-- > Q: Docker does not start. It complains virtualization not enabled in BIOS.
+
+This is vendor specific, depending on the manufacturer of your computer, there are different ways to fix this, but usually, pressing a key (usually `F2` for Lenovo) before Windows even start will take you to the BIOS of your machine. In there, you will find a `Virtualization` tab where this feature can be enabled.
+
+> Q: Cannot start containers, nor do anything with Docker. Error message indicates docker daemon not accessible or no response.
+
+Make sure docker is running. Especially after a fresh install, docker does not start immediately. Go to the start menu, and start `Docker for Windows`. -->
+
+> Q: `conda` commands don't work.
+
+Try running them from the *Conda Prompt*. Depending on how you installed Anaconda, it might not be available by default on the normal Windows command prompt.
+
+> Q: When trying to install the framework in Rhino, it fails indicating the lib folder of IronPython does not exist.
+
+Make sure you have opened Rhino 6 and Grasshopper at least once, so that it finishes setting up all its internal folder structure.
+
+<!-- > Q: It fails when trying to install on Rhino.
+
+Try starting the command prompt as administrator. Depending on the version of Python, it might be required or not.
+ -->
+
+> Q: error: Microsoft Visual C++ 14.0 is required
+
+Follow the link to install Microsoft Visual C++ 14.0
+https://www.scivision.co/python-windows-visual-c++-14-required/
+
+<!-- > Q: IWhen installing pip install compas_fab error: cannot find Frame
+
+You have already installed an older version of COMPAS. Please remove it. -->
